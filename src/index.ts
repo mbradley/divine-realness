@@ -1539,7 +1539,6 @@ function getDashboardHtml(): string {
                             <button class="copy-btn" onclick="copyToClipboard('\${job.event_id}', this)">Copy</button>
                         </span>
                         <button class="rerun-btn" onclick="rerunJob('\${job.event_id}', '\${job.video_url.replace(/'/g, "\\\\'")}', this)">Walk Again</button>
-                        <button class="read-btn" onclick="showDetails('\${job.event_id}')">Read</button>
                         <span class="job-status status-\${job.status}">\${getStatusLabel(job.status)}</span>
                     </div>
                     <div class="job-content">
@@ -1549,9 +1548,9 @@ function getDashboardHtml(): string {
                                 <a href="\${job.video_url}" target="_blank" style="color: #888; text-decoration: none; border-bottom: 1px solid #333;">\${job.video_url.substring(0, 50)}...</a>
                             </div>
                         </div>
-                        <div class="provider-grid">
-                            \${renderProvider('Reality Defender', job.results?.reality_defender)}
-                            \${renderProvider('Hive AI', job.results?.hive)}
+                        <div class="detector-grid">
+                            \${renderDetectorCard('Reality Defender', job.results?.reality_defender)}
+                            \${renderDetectorCard('Hive AI', job.results?.hive)}
                         </div>
                     </div>
                 </div>

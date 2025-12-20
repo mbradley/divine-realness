@@ -6,6 +6,44 @@ export interface Env {
   REALITY_DEFENDER_API_KEY: string;
   HIVE_API_KEY?: string;
   SENSITY_API_KEY?: string;
+  ACTION_QUEUE: Queue<ModerationAction>;
+}
+
+// Moderation action types
+interface ModerationAction {
+  type: 'moderation-action';
+  sha256: string;
+  action: 'PERMANENT_BAN' | 'REVIEW' | 'AGE_RESTRICTED' | 'SAFE';
+  reason: string;
+  source: string;
+  requestId: string;
+}
+
+interface ActionResult {
+  type: string;
+  sha256: string;
+  action: string;
+  status: string;
+  reason?: string;
+  error?: string;
+  processedAt?: string;
+  requestId?: string;
+}
+
+// Nostr event structure from queue
+interface NostrEvent {
+  id: string;
+  pubkey: string;
+  created_at: number;
+  kind: number;
+  tags: string[][];
+  content: string;
+  sig: string;
+}
+
+interface QueueMessage {
+  event: NostrEvent;
+  relays?: string[];
 }
 
 interface Job {
@@ -110,6 +148,12 @@ export default {
         return handleDeleteJob(jobId, env);
       }
 
+      // Moderation action endpoint: POST /api/moderate/:jobId
+      if (path.startsWith('/api/moderate/') && request.method === 'POST') {
+        const jobId = path.replace('/api/moderate/', '');
+        return handleModerateJob(jobId, request, env);
+      }
+
       if (path.startsWith('/webhook/') && request.method === 'POST') {
         const provider = path.replace('/webhook/', '');
         return handleWebhook(provider, request, env);
@@ -128,7 +172,90 @@ export default {
       });
     }
   },
+
+  // Queue handler for both video detection and action results
+  async queue(batch: MessageBatch<QueueMessage | ActionResult>, env: Env): Promise<void> {
+    for (const msg of batch.messages) {
+      try {
+        const body = msg.body as Record<string, unknown>;
+
+        // Check if this is an action result message
+        if (body.type === 'moderation-action-result' || body.status !== undefined) {
+          await handleActionResult(body as unknown as ActionResult, env);
+          msg.ack();
+          continue;
+        }
+
+        // Otherwise, treat as video detection message
+        const { event } = body as QueueMessage;
+        if (!event) {
+          console.log(`[Queue] Unknown message type:`, body);
+          msg.ack();
+          continue;
+        }
+
+        console.log(`[Queue] Processing event ${event.id} kind=${event.kind}`);
+
+        // Check if we should analyze this video
+        if (!shouldAnalyzeEvent(event)) {
+          console.log(`[Queue] Skipping event ${event.id} - does not need analysis`);
+          msg.ack();
+          continue;
+        }
+
+        // Extract video URL from imeta tag
+        const videoUrl = extractVideoUrl(event);
+        if (!videoUrl) {
+          console.log(`[Queue] No video URL found in event ${event.id}`);
+          msg.ack();
+          continue;
+        }
+
+        // Check if we already analyzed this event
+        const existingRow = await env.DB.prepare(
+          'SELECT id FROM jobs WHERE event_id = ?'
+        ).bind(event.id).first();
+
+        if (existingRow) {
+          console.log(`[Queue] Event ${event.id} already analyzed`);
+          msg.ack();
+          continue;
+        }
+
+        // Submit for analysis
+        console.log(`[Queue] Submitting event ${event.id} for analysis: ${videoUrl}`);
+        await analyzeFromQueue(event, videoUrl, env);
+        msg.ack();
+      } catch (error) {
+        console.error(`[Queue] Error processing message:`, error);
+        msg.retry();
+      }
+    }
+  },
 };
+
+// Handle action result from moderation queue
+async function handleActionResult(result: ActionResult, env: Env): Promise<void> {
+  console.log(`[ActionResult] Received: sha256=${result.sha256} action=${result.action} status=${result.status}`);
+
+  // Update jobs that match this sha256 (media_hash)
+  await env.DB.prepare(
+    `UPDATE jobs SET
+      moderation_action = ?,
+      moderation_status = ?,
+      moderation_error = ?,
+      moderation_processed_at = ?
+    WHERE media_hash = ?`
+  ).bind(
+    result.action,
+    result.status,
+    result.error || null,
+    result.processedAt || new Date().toISOString(),
+    result.sha256
+  ).run();
+
+  console.log(`[ActionResult] Updated job with sha256=${result.sha256}`);
+}
 
 async function handleAnalyze(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const body = await request.json() as { eventId: string; videoUrl: string; mediaHash?: string };
@@ -430,6 +557,66 @@ async function handleDeleteJob(jobId: string, env: Env): Promise<Response> {
 
   console.log(`[Delete] Deleted job ${jobId}`);
   return new Response(JSON.stringify({ success: true, deleted: jobId }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+// Handle moderation action request
+async function handleModerateJob(jobId: string, request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as { action: string; reason?: string };
+  const action = body.action?.toUpperCase() as ModerationAction['action'];
+
+  if (!['PERMANENT_BAN', 'REVIEW', 'AGE_RESTRICTED', 'SAFE'].includes(action)) {
+    return new Response(JSON.stringify({ error: 'Invalid action. Must be PERMANENT_BAN, REVIEW, AGE_RESTRICTED, or SAFE' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Get the job to find the media_hash
+  const row = await env.DB.prepare(
+    'SELECT media_hash, video_url FROM jobs WHERE event_id = ?'
+  ).bind(jobId).first<{ media_hash: string; video_url: string }>();
+
+  if (!row) {
+    return new Response(JSON.stringify({ error: 'Job not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const requestId = crypto.randomUUID();
+  const message: ModerationAction = {
+    type: 'moderation-action',
+    sha256: row.media_hash,
+    action: action,
+    reason: body.reason || `AI detection triggered ${action}`,
+    source: 'realness-admin',
+    requestId: requestId,
+  };
+
+  // Send to the action queue
+  await env.ACTION_QUEUE.send(message);
+
+  // Update local job with pending action
+  await env.DB.prepare(
+    `UPDATE jobs SET
+      moderation_action = ?,
+      moderation_status = 'pending',
+      moderation_request_id = ?
+    WHERE event_id = ?`
+  ).bind(action, requestId, jobId).run();
+
+  console.log(`[Moderate] Sent ${action} action for job ${jobId} (sha256: ${row.media_hash})`);
+
+  return new Response(JSON.stringify({
+    success: true,
+    jobId: jobId,
+    action: action,
+    sha256: row.media_hash,
+    requestId: requestId,
+    status: 'pending',
+  }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
@@ -855,6 +1042,139 @@ async function hashString(str: string): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Queue helper functions
+
+function shouldAnalyzeEvent(event: NostrEvent): boolean {
+  // Trusted divine.video server hosts - no need to check these
+  const trustedHosts = ['blossom.divine.video', 'cdn.divine.video'];
+
+  // Check for proofmode tags (verified camera capture)
+  const hasProofmode = event.tags.some(t => t[0] === 'proofmode' || t[0] === 'proof');
+  if (hasProofmode) {
+    console.log(`[Queue] Event has proofmode - skipping`);
+    return false;
+  }
+
+  // Check if from divine.video client (trusted source)
+  const clientTag = event.tags.find(t => t[0] === 'client');
+  if (clientTag && clientTag[1]?.includes('divine.video')) {
+    console.log(`[Queue] Event from divine.video client - skipping`);
+    return false;
+  }
+
+  // Extract video URL to check hosting
+  const videoUrl = extractVideoUrl(event);
+  if (videoUrl) {
+    try {
+      const url = new URL(videoUrl);
+      if (trustedHosts.includes(url.hostname)) {
+        console.log(`[Queue] Video hosted on trusted server ${url.hostname} - skipping`);
+        return false;
+      }
+    } catch {
+      // Invalid URL, continue to analyze
+    }
+  }
+
+  // Check if event has a report (NIP-56 kind 1984)
+  const hasReportTag = event.tags.some(t => t[0] === 'report' || (t[0] === 'e' && t[3] === 'report'));
+  if (hasReportTag) {
+    console.log(`[Queue] Event has report - should analyze`);
+    return true;
+  }
+
+  // Default: analyze videos from untrusted sources
+  console.log(`[Queue] Event from untrusted source - should analyze`);
+  return true;
+}
+
+function extractVideoUrl(event: NostrEvent): string | null {
+  // Look for imeta tag (NIP-92)
+  const imetaTag = event.tags.find(t => t[0] === 'imeta');
+  if (imetaTag) {
+    for (let i = 1; i < imetaTag.length; i++) {
+      const part = imetaTag[i];
+      if (part.startsWith('url ')) return part.substring(4);
+      if (part === 'url' && i + 1 < imetaTag.length) return imetaTag[++i];
+    }
+  }
+
+  // Look for video/media tag
+  const mediaTag = event.tags.find(t => t[0] === 'media' || t[0] === 'video');
+  if (mediaTag && mediaTag[1]) return mediaTag[1];
+
+  // Look for URL in content that looks like a video
+  const videoRegex = /(https?:\/\/[^\s]+\.(mp4|mov|webm|avi|mkv)(\?[^\s]*)?)/i;
+  const match = event.content.match(videoRegex);
+  if (match) return match[1];
+
+  return null;
+}
+
+async function analyzeFromQueue(event: NostrEvent, videoUrl: string, env: Env): Promise<void> {
+  const mediaHash = await hashString(videoUrl);
+  const results: Record<string, DetectionResult> = {};
+
+  // Submit to Reality Defender
+  try {
+    const rdResult = await submitToRealityDefender(videoUrl, '', env);
+    results['reality_defender'] = {
+      provider: 'reality_defender',
+      status: 'pending',
+      requestId: rdResult.requestId,
+    };
+  } catch (error) {
+    console.error('[Queue] Reality Defender error:', error);
+    results['reality_defender'] = {
+      provider: 'reality_defender',
+      status: 'error',
+      error: String(error),
+    };
+  }
+
+  // Submit to Hive AI (synchronous)
+  if (env.HIVE_API_KEY) {
+    try {
+      const hiveResult = await submitToHive(videoUrl, env);
+      results['hive'] = {
+        provider: 'hive',
+        status: 'complete',
+        score: hiveResult.score,
+        verdict: hiveResult.verdict,
+        raw: hiveResult.raw,
+      };
+    } catch (error) {
+      console.error('[Queue] Hive error:', error);
+      results['hive'] = {
+        provider: 'hive',
+        status: 'error',
+        error: String(error),
+      };
+    }
+  }
+
+  // Check if all providers are done
+  const allComplete = Object.values(results).every(r => r.status === 'complete' || r.status === 'error');
+  const status = allComplete ? 'complete' : 'pending';
+  const completedAt = allComplete ? new Date().toISOString() : null;
+
+  // Insert job into D1
+  await env.DB.prepare(
+    `INSERT INTO jobs (event_id, media_hash, video_url, status, submitted_at, completed_at, results)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    event.id,
+    mediaHash,
+    videoUrl,
+    status,
+    new Date().toISOString(),
+    completedAt,
+    JSON.stringify(results)
+  ).run();
+
+  console.log(`[Queue] Job created for event ${event.id}, status: ${status}`);
 }
 
 function serveDashboard(): Response {

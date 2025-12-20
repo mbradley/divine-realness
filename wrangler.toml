@@ -19,6 +19,24 @@ database_id = "889ff474-58e3-4a6e-9364-2e66658f6ec2"
 pattern = "realness.admin.divine.video/*"
 zone_name = "divine.video"
 
+# Queue for automatic video detection
+[[queues.consumers]]
+queue = "video-detection-queue"
+max_batch_size = 1
+max_retries = 3
+
+# Queue producer for sending moderation actions
+[[queues.producers]]
+binding = "ACTION_QUEUE"
+queue = "moderation-actions-queue"
+
+# Queue consumer for receiving action results
+[[queues.consumers]]
+queue = "moderation-action-results-queue"
+max_batch_size = 25
+max_batch_timeout = 30
+max_retries = 3
+
 # Secrets (set via wrangler secret put):
 # - REALITY_DEFENDER_API_KEY
 # - HIVE_API_KEY

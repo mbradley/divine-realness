@@ -825,19 +825,26 @@ async function pollRealityDefender(
 
   // Extract score from resultsSummary (0-100 scale)
   const finalScore = data.resultsSummary?.metadata?.finalScore ?? 0;
-  const score = finalScore / 100; // Normalize to 0-1
-
-  // Warn if score is suspiciously zero but we got a completed status
-  if (score === 0 && rdStatus && rdStatus !== 'NOT_APPLICABLE' && rdStatus !== 'UNABLE_TO_EVALUATE') {
-    console.warn('[RealityDefender] WARNING: score is 0 despite status:', rdStatus,
-      'Full response:', JSON.stringify(data).substring(0, 500));
-  }
+  let score = finalScore / 100; // Normalize to 0-1
 
   // Map Reality Defender status to our verdict
   let verdict: 'authentic' | 'uncertain' | 'likely_ai' = 'uncertain';
-  if (rdStatus === 'AUTHENTIC') verdict = 'authentic';
-  else if (rdStatus === 'FAKE' || rdStatus === 'SUSPICIOUS') verdict = 'likely_ai';
-  else if (rdStatus === 'NOT_APPLICABLE' || rdStatus === 'UNABLE_TO_EVALUATE') verdict = 'uncertain';
+  if (rdStatus === 'AUTHENTIC') {
+    verdict = 'authentic';
+    // If status says authentic but no score, use a low score
+    if (score === 0) score = 0.1;
+  } else if (rdStatus === 'FAKE') {
+    verdict = 'likely_ai';
+    // If status says FAKE but finalScore is missing, use high score
+    if (score === 0) score = 0.95;
+  } else if (rdStatus === 'SUSPICIOUS') {
+    verdict = 'likely_ai';
+    if (score === 0) score = 0.7;
+  } else if (rdStatus === 'NOT_APPLICABLE' || rdStatus === 'UNABLE_TO_EVALUATE') {
+    verdict = 'uncertain';
+  }
+
+  console.log('[RealityDefender] Status:', rdStatus, 'FinalScore:', finalScore, 'ComputedScore:', score, 'Verdict:', verdict);
 
   return { score, verdict, raw: data };
 }

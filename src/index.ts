@@ -1338,19 +1338,37 @@ function getDashboardHtml(): string {
             } catch (e) { console.error('Poll error:', e); }
         }
 
-        async function rerunJob(eventId, videoUrl) {
+        async function rerunJob(eventId, videoUrl, btn) {
+            const originalText = btn.textContent;
+            btn.textContent = 'Walking...';
+            btn.disabled = true;
             try {
                 // Delete the old job first
-                await fetch(\`/api/jobs/\${eventId}\`, { method: 'DELETE' });
+                const delResp = await fetch(\`/api/jobs/\${eventId}\`, { method: 'DELETE' });
+                if (!delResp.ok) {
+                    throw new Error('Failed to delete old job: ' + await delResp.text());
+                }
                 // Resubmit
-                await fetch('/analyze', {
+                const analyzeResp = await fetch('/analyze', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ eventId, videoUrl }),
                 });
+                if (!analyzeResp.ok) {
+                    throw new Error('Failed to resubmit: ' + await analyzeResp.text());
+                }
+                // Small delay to ensure DB write completes
+                await new Promise(r => setTimeout(r, 500));
                 lastJobsHash = ''; // Force re-render
-                loadJobs(currentPage);
-            } catch (e) { console.error('Rerun error:', e); }
+                await loadJobs(currentPage);
+                // Poll immediately for pending jobs
+                pollJob(eventId);
+            } catch (e) {
+                console.error('Rerun error:', e);
+                alert('Rerun failed: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
         }
 
         function renderJobs(jobs) {
@@ -1366,7 +1384,7 @@ function getDashboardHtml(): string {
                             <span class="job-id-text" title="\${job.event_id}">\${job.event_id}</span>
                             <button class="copy-btn" onclick="copyToClipboard('\${job.event_id}', this)">Copy</button>
                         </span>
-                        <button class="rerun-btn" onclick="rerunJob('\${job.event_id}', '\${job.video_url.replace(/'/g, "\\\\'")}')">Walk Again</button>
+                        <button class="rerun-btn" onclick="rerunJob('\${job.event_id}', '\${job.video_url.replace(/'/g, "\\\\'")}', this)">Walk Again</button>
                         <span class="job-status status-\${job.status}">\${getStatusLabel(job.status)}</span>
                     </div>
                     <div class="job-content">

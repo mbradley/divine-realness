@@ -1147,36 +1147,39 @@ function getDashboardHtml(): string {
         .modal-body { padding: 28px; }
 
         .detector-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+            display: flex;
+            gap: 16px;
+            flex: 1;
+            min-width: 320px;
         }
         .detector-card {
             background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 8px;
-            padding: 24px;
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 6px;
+            padding: 16px 20px;
             text-align: center;
+            flex: 1;
+            min-width: 140px;
         }
         .detector-card h3 {
-            color: #888;
-            font-size: 0.7rem;
+            color: #777;
+            font-size: 0.65rem;
             text-transform: uppercase;
-            letter-spacing: 0.15em;
-            margin: 0 0 20px 0;
-            font-weight: 500;
+            letter-spacing: 0.12em;
+            margin: 0 0 12px 0;
+            font-weight: 600;
         }
         .score-ring {
-            width: 120px; height: 120px;
-            margin: 0 auto 16px;
+            width: 80px; height: 80px;
+            margin: 0 auto 10px;
             position: relative;
         }
         .score-ring svg { transform: rotate(-90deg); }
         .score-ring circle {
             fill: none;
-            stroke-width: 8;
+            stroke-width: 6;
         }
-        .score-ring .bg { stroke: rgba(255,255,255,0.06); }
+        .score-ring .bg { stroke: rgba(255,255,255,0.08); }
         .score-ring .fg { stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
         .score-ring .fg.fake { stroke: #e57373; }
         .score-ring .fg.authentic { stroke: #81c784; }
@@ -1185,16 +1188,16 @@ function getDashboardHtml(): string {
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            font-size: 1.8rem;
+            font-size: 1.3rem;
             font-weight: 700;
             color: #fff;
         }
         .verdict-label {
-            font-size: 0.85rem;
+            font-size: 0.7rem;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin-bottom: 20px;
+            letter-spacing: 0.08em;
+            margin-bottom: 12px;
         }
         .verdict-label.fake { color: #e57373; }
         .verdict-label.authentic { color: #81c784; }
@@ -1203,56 +1206,33 @@ function getDashboardHtml(): string {
         .detail-item {
             display: flex;
             justify-content: space-between;
-            padding: 8px 0;
+            padding: 5px 0;
             border-top: 1px solid rgba(255,255,255,0.04);
-            font-size: 0.8rem;
+            font-size: 0.7rem;
         }
-        .detail-item:first-of-type { border-top: none; margin-top: 12px; }
-        .detail-item .label { color: #666; }
-        .detail-item .value { color: #ccc; font-weight: 500; }
+        .detail-item:first-of-type { border-top: none; margin-top: 8px; }
+        .detail-item .label { color: #555; }
+        .detail-item .value { color: #aaa; font-weight: 500; }
 
         .source-tag {
             display: inline-block;
             background: rgba(212,175,55,0.15);
             border: 1px solid rgba(212,175,55,0.3);
             color: #d4af37;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 0.75rem;
+            padding: 4px 10px;
+            border-radius: 3px;
+            font-size: 0.65rem;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            margin-top: 8px;
-        }
-
-        .frame-summary {
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.06);
-            font-size: 0.75rem;
-            color: #555;
-            text-align: center;
+            margin-bottom: 8px;
         }
 
         .no-data {
             color: #444;
-            font-size: 0.85rem;
-            padding: 30px 0;
+            font-size: 0.75rem;
+            padding: 20px 0;
         }
-
-        .read-btn {
-            background: rgba(212,175,55,0.12);
-            border: 1px solid rgba(212,175,55,0.35);
-            color: #d4af37;
-            padding: 6px 14px;
-            border-radius: 2px;
-            cursor: pointer;
-            font-size: 0.7rem;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            transition: all 0.2s ease;
-        }
-        .read-btn:hover { background: rgba(212,175,55,0.2); }
     </style>
 </head>
 <body>
@@ -1620,13 +1600,13 @@ function getDashboardHtml(): string {
         }
 
         function renderScoreRing(score, verdictClass) {
-            const radius = 52;
+            const radius = 34;
             const circumference = 2 * Math.PI * radius;
             const offset = circumference - (score / 100) * circumference;
             return '<div class="score-ring">' +
-                '<svg width="120" height="120">' +
-                    '<circle class="bg" cx="60" cy="60" r="' + radius + '"/>' +
-                    '<circle class="fg ' + verdictClass + '" cx="60" cy="60" r="' + radius + '" ' +
+                '<svg width="80" height="80">' +
+                    '<circle class="bg" cx="40" cy="40" r="' + radius + '"/>' +
+                    '<circle class="fg ' + verdictClass + '" cx="40" cy="40" r="' + radius + '" ' +
                         'stroke-dasharray="' + circumference + '" ' +
                         'stroke-dashoffset="' + offset + '"/>' +
                 '</svg>' +

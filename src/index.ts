@@ -70,7 +70,7 @@ export default {
     // CORS headers
     const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     };
 
@@ -103,6 +103,11 @@ export default {
       if (path.startsWith('/api/jobs/') && request.method === 'GET') {
         const jobId = path.replace('/api/jobs/', '');
         return handleGetJob(jobId, env);
+      }
+
+      if (path.startsWith('/api/jobs/') && request.method === 'DELETE') {
+        const jobId = path.replace('/api/jobs/', '');
+        return handleDeleteJob(jobId, env);
       }
 
       if (path.startsWith('/webhook/') && request.method === 'POST') {
@@ -230,7 +235,7 @@ async function submitToRealityDefender(
     throw new Error('REALITY_DEFENDER_API_KEY is not configured');
   }
 
-  console.log('API key prefix:', env.REALITY_DEFENDER_API_KEY.substring(0, 10) + '...');
+  // API key loaded from secrets (never log keys, even partially)
 
   // Step 1: Download the video
   const videoResponse = await fetch(videoUrl);
@@ -407,6 +412,24 @@ async function handleGetJob(jobId: string, env: Env): Promise<Response> {
   }
 
   return new Response(JSON.stringify(rowToJob(row)), {
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+async function handleDeleteJob(jobId: string, env: Env): Promise<Response> {
+  const result = await env.DB.prepare(
+    'DELETE FROM jobs WHERE event_id = ?'
+  ).bind(jobId).run();
+
+  if (result.meta.changes === 0) {
+    return new Response(JSON.stringify({ error: 'Job not found' }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  console.log(`[Delete] Deleted job ${jobId}`);
+  return new Response(JSON.stringify({ success: true, deleted: jobId }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
@@ -984,6 +1007,21 @@ function getDashboardHtml(): string {
         }
         .copy-btn:hover { background: rgba(212,175,55,0.1); }
         .copy-btn.copied { background: rgba(212,175,55,0.2); border-color: #d4af37; }
+        .rerun-btn {
+            background: transparent;
+            border: 1px solid rgba(232,130,180,0.4);
+            color: #e882b4;
+            padding: 4px 10px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 0.7rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+            margin-left: 8px;
+        }
+        .rerun-btn:hover { background: rgba(232,130,180,0.15); }
+        .rerun-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .job-status {
             padding: 6px 16px;
             border-radius: 2px;
@@ -1198,8 +1236,51 @@ function getDashboardHtml(): string {
             });
         }
 
+        async function rerunJob(eventId, videoUrl) {
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = 'Sashaying...';
+            btn.disabled = true;
+
+            try {
+                // Delete the old job
+                const deleteRes = await fetch('/api/jobs/' + eventId, { method: 'DELETE' });
+                if (!deleteRes.ok) {
+                    throw new Error('Failed to clear old reading');
+                }
+
+                // Resubmit for analysis
+                const analyzeRes = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ eventId: eventId, videoUrl: videoUrl })
+                });
+
+                if (!analyzeRes.ok) {
+                    throw new Error('Failed to resubmit');
+                }
+
+                btn.textContent = 'Werking...';
+                lastJobsHash = ''; // Force refresh
+                loadJobs(currentPage);
+
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            } catch (err) {
+                btn.textContent = 'Choked!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 2000);
+                console.error('Rerun failed:', err);
+            }
+        }
+
         let currentPage = 1;
         let pagination = null;
+        let lastJobsHash = '';
 
         async function loadJobs(page = 1) {
             try {
@@ -1208,8 +1289,14 @@ function getDashboardHtml(): string {
                 const jobs = data.jobs || [];
                 pagination = data.pagination;
                 currentPage = page;
-                renderJobs(jobs);
-                renderPagination();
+
+                // Only re-render if data actually changed (prevents video reload)
+                const jobsHash = JSON.stringify(jobs);
+                if (jobsHash !== lastJobsHash) {
+                    lastJobsHash = jobsHash;
+                    renderJobs(jobs);
+                    renderPagination();
+                }
 
                 // Poll for results on pending jobs
                 for (const job of jobs) {
@@ -1251,6 +1338,21 @@ function getDashboardHtml(): string {
             } catch (e) { console.error('Poll error:', e); }
         }
 
+        async function rerunJob(eventId, videoUrl) {
+            try {
+                // Delete the old job first
+                await fetch(\`/api/jobs/\${eventId}\`, { method: 'DELETE' });
+                // Resubmit
+                await fetch('/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ eventId, videoUrl }),
+                });
+                lastJobsHash = ''; // Force re-render
+                loadJobs(currentPage);
+            } catch (e) { console.error('Rerun error:', e); }
+        }
+
         function renderJobs(jobs) {
             const el = document.getElementById('jobsList');
             if (!jobs.length) {
@@ -1264,6 +1366,7 @@ function getDashboardHtml(): string {
                             <span class="job-id-text" title="\${job.event_id}">\${job.event_id}</span>
                             <button class="copy-btn" onclick="copyToClipboard('\${job.event_id}', this)">Copy</button>
                         </span>
+                        <button class="rerun-btn" onclick="rerunJob('\${job.event_id}', '\${job.video_url.replace(/'/g, "\\\\'")}')">Walk Again</button>
                         <span class="job-status status-\${job.status}">\${getStatusLabel(job.status)}</span>
                     </div>
                     <div class="job-content">

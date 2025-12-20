@@ -58,6 +58,11 @@ interface Job {
   error?: string;
   webhook_url?: string;
   webhook_called?: boolean;
+  moderation_action?: string;
+  moderation_status?: string;
+  moderation_request_id?: string;
+  moderation_error?: string;
+  moderation_processed_at?: string;
 }
 
 interface JobRow {
@@ -72,6 +77,11 @@ interface JobRow {
   webhook_url: string | null;
   webhook_called: number;
   results: string | null;
+  moderation_action: string | null;
+  moderation_status: string | null;
+  moderation_request_id: string | null;
+  moderation_error: string | null;
+  moderation_processed_at: string | null;
 }
 
 interface DetectionResult {
@@ -97,6 +107,11 @@ function rowToJob(row: JobRow): Job {
     webhook_url: row.webhook_url || undefined,
     webhook_called: row.webhook_called === 1,
     results: row.results ? JSON.parse(row.results) : {},
+    moderation_action: row.moderation_action || undefined,
+    moderation_status: row.moderation_status || undefined,
+    moderation_request_id: row.moderation_request_id || undefined,
+    moderation_error: row.moderation_error || undefined,
+    moderation_processed_at: row.moderation_processed_at || undefined,
   };
 }
 
@@ -177,7 +192,7 @@ export default {
   async queue(batch: MessageBatch<QueueMessage | ActionResult>, env: Env): Promise<void> {
     for (const msg of batch.messages) {
       try {
-        const body = msg.body as Record<string, unknown>;
+        const body = msg.body as unknown as Record<string, unknown>;
 
         // Check if this is an action result message
         if (body.type === 'moderation-action-result' || body.status !== undefined) {
@@ -187,7 +202,8 @@ export default {
         }
 
         // Otherwise, treat as video detection message
-        const { event } = body as QueueMessage;
+        const queueMsg = body as unknown as QueueMessage;
+        const event = queueMsg.event;
         if (!event) {
           console.log(`[Queue] Unknown message type:`, body);
           msg.ack();
@@ -1553,6 +1569,75 @@ function getDashboardHtml(): string {
             font-size: 0.75rem;
             padding: 20px 0;
         }
+
+        /* Moderation action buttons */
+        .moderation-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            flex-wrap: wrap;
+        }
+        .action-btn {
+            padding: 8px 14px;
+            border-radius: 3px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 1px solid;
+        }
+        .action-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .action-btn.ban {
+            background: rgba(229,115,115,0.15);
+            border-color: rgba(229,115,115,0.4);
+            color: #e57373;
+        }
+        .action-btn.ban:hover:not(:disabled) {
+            background: rgba(229,115,115,0.25);
+        }
+        .action-btn.review {
+            background: rgba(212,175,55,0.15);
+            border-color: rgba(212,175,55,0.4);
+            color: #d4af37;
+        }
+        .action-btn.review:hover:not(:disabled) {
+            background: rgba(212,175,55,0.25);
+        }
+        .action-btn.age {
+            background: rgba(255,183,77,0.15);
+            border-color: rgba(255,183,77,0.4);
+            color: #ffb74d;
+        }
+        .action-btn.age:hover:not(:disabled) {
+            background: rgba(255,183,77,0.25);
+        }
+        .action-btn.safe {
+            background: rgba(129,199,132,0.15);
+            border-color: rgba(129,199,132,0.4);
+            color: #81c784;
+        }
+        .action-btn.safe:hover:not(:disabled) {
+            background: rgba(129,199,132,0.25);
+        }
+        .moderation-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.75rem;
+            padding: 8px 12px;
+            border-radius: 3px;
+            background: rgba(0,0,0,0.3);
+        }
+        .moderation-status.pending { color: #d4af37; }
+        .moderation-status.success { color: #81c784; }
+        .moderation-status.error { color: #e57373; }
     </style>
 </head>
 <body>
@@ -1853,6 +1938,7 @@ function getDashboardHtml(): string {
                             \${renderDetectorCard('Hive AI', job.results?.hive)}
                         </div>
                     </div>
+                    \${renderModerationSection(job)}
                 </div>
             \`).join('');
         }
@@ -2015,6 +2101,83 @@ function getDashboardHtml(): string {
             }
 
             return html;
+        }
+
+        function renderModerationSection(job) {
+            // If moderation action is pending or complete, show status
+            if (job.moderation_status) {
+                const statusClass = job.moderation_status === 'success' ? 'success' :
+                                   job.moderation_status === 'pending' ? 'pending' : 'error';
+                const actionLabel = getModerationLabel(job.moderation_action);
+                const statusText = job.moderation_status === 'success' ? 'Applied' :
+                                   job.moderation_status === 'pending' ? 'Pending...' : 'Failed';
+                return '<div class="moderation-actions">' +
+                    '<div class="moderation-status ' + statusClass + '">' +
+                        '<span>' + actionLabel + '</span>' +
+                        '<span style="opacity:0.6">•</span>' +
+                        '<span>' + statusText + '</span>' +
+                        (job.moderation_error ? '<span style="opacity:0.6">(' + job.moderation_error + ')</span>' : '') +
+                    '</div>' +
+                '</div>';
+            }
+
+            // Show action buttons only if detection is complete
+            if (job.status !== 'complete') {
+                return '';
+            }
+
+            return '<div class="moderation-actions">' +
+                '<button class="action-btn ban" onclick="takeAction(\\'' + job.event_id + '\\', \\'PERMANENT_BAN\\', this)">' +
+                    '🚫 Ban' +
+                '</button>' +
+                '<button class="action-btn review" onclick="takeAction(\\'' + job.event_id + '\\', \\'REVIEW\\', this)">' +
+                    '👀 Review' +
+                '</button>' +
+                '<button class="action-btn age" onclick="takeAction(\\'' + job.event_id + '\\', \\'AGE_RESTRICTED\\', this)">' +
+                    '🔞 Age Restrict' +
+                '</button>' +
+                '<button class="action-btn safe" onclick="takeAction(\\'' + job.event_id + '\\', \\'SAFE\\', this)">' +
+                    '✓ Safe' +
+                '</button>' +
+            '</div>';
+        }
+
+        function getModerationLabel(action) {
+            switch (action) {
+                case 'PERMANENT_BAN': return '🚫 Banned';
+                case 'REVIEW': return '👀 In Review';
+                case 'AGE_RESTRICTED': return '🔞 Age Restricted';
+                case 'SAFE': return '✓ Marked Safe';
+                default: return action || 'Unknown';
+            }
+        }
+
+        async function takeAction(jobId, action, btn) {
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+
+            try {
+                const res = await fetch('/api/moderate/' + jobId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: action })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || 'Failed to send action');
+                }
+
+                // Refresh the job list to show the new status
+                loadJobs(currentPage);
+            } catch (e) {
+                console.error('Action error:', e);
+                alert('Action failed: ' + e.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
         }
 
         loadJobs();

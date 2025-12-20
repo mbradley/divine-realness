@@ -1112,92 +1112,137 @@ function getDashboardHtml(): string {
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.85);
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
             z-index: 1000;
             overflow-y: auto;
         }
         .modal-overlay.visible { display: flex; justify-content: center; padding: 40px 20px; }
         .modal {
-            background: #1a1a1a;
+            background: #0d0d0d;
             border: 1px solid rgba(212,175,55,0.3);
-            border-radius: 4px;
-            max-width: 800px;
+            border-radius: 8px;
+            max-width: 700px;
             width: 100%;
-            max-height: fit-content;
         }
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 24px;
-            border-bottom: 1px solid rgba(212,175,55,0.2);
+            padding: 20px 28px;
+            border-bottom: 1px solid rgba(212,175,55,0.15);
         }
         .modal-header h2 {
             font-family: 'Playfair Display', serif;
             color: #d4af37;
-            font-size: 1.3rem;
+            font-size: 1.4rem;
             margin: 0;
+            font-style: italic;
         }
         .modal-close {
-            background: none;
-            border: none;
-            color: #888;
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0;
-            line-height: 1;
+            background: none; border: none; color: #666;
+            font-size: 1.8rem; cursor: pointer; padding: 0; line-height: 1;
         }
         .modal-close:hover { color: #d4af37; }
-        .modal-body { padding: 24px; }
-        .detail-section {
-            margin-bottom: 24px;
-            padding: 16px;
-            background: rgba(0,0,0,0.3);
-            border-radius: 4px;
-            border-left: 3px solid #d4af37;
+        .modal-body { padding: 28px; }
+
+        .detector-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
         }
-        .detail-section:last-child { margin-bottom: 0; }
-        .detail-section h3 {
-            color: #d4af37;
-            font-size: 0.9rem;
+        .detector-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+        }
+        .detector-card h3 {
+            color: #888;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            margin: 0 0 20px 0;
+            font-weight: 500;
+        }
+        .score-ring {
+            width: 120px; height: 120px;
+            margin: 0 auto 16px;
+            position: relative;
+        }
+        .score-ring svg { transform: rotate(-90deg); }
+        .score-ring circle {
+            fill: none;
+            stroke-width: 8;
+        }
+        .score-ring .bg { stroke: rgba(255,255,255,0.06); }
+        .score-ring .fg { stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
+        .score-ring .fg.fake { stroke: #e57373; }
+        .score-ring .fg.authentic { stroke: #81c784; }
+        .score-ring .fg.uncertain { stroke: #d4af37; }
+        .score-value {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #fff;
+        }
+        .verdict-label {
+            font-size: 0.85rem;
+            font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.1em;
-            margin: 0 0 12px 0;
+            margin-bottom: 20px;
         }
-        .detail-row {
+        .verdict-label.fake { color: #e57373; }
+        .verdict-label.authentic { color: #81c784; }
+        .verdict-label.uncertain { color: #d4af37; }
+
+        .detail-item {
             display: flex;
             justify-content: space-between;
             padding: 8px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            font-size: 0.85rem;
+            border-top: 1px solid rgba(255,255,255,0.04);
+            font-size: 0.8rem;
         }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-label { color: #888; }
-        .detail-value { color: #fff; font-weight: 500; }
-        .detail-value.fake { color: #e57373; }
-        .detail-value.authentic { color: #81c784; }
-        .detail-value.uncertain { color: #d4af37; }
-        .model-scores {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-            gap: 8px;
+        .detail-item:first-of-type { border-top: none; margin-top: 12px; }
+        .detail-item .label { color: #666; }
+        .detail-item .value { color: #ccc; font-weight: 500; }
+
+        .source-tag {
+            display: inline-block;
+            background: rgba(212,175,55,0.15);
+            border: 1px solid rgba(212,175,55,0.3);
+            color: #d4af37;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
             margin-top: 8px;
         }
-        .model-score {
-            background: rgba(255,255,255,0.03);
-            padding: 8px;
-            border-radius: 2px;
+
+        .frame-summary {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255,255,255,0.06);
             font-size: 0.75rem;
+            color: #555;
+            text-align: center;
         }
-        .model-score .name { color: #888; }
-        .model-score .score { color: #fff; font-weight: 600; }
+
+        .no-data {
+            color: #444;
+            font-size: 0.85rem;
+            padding: 30px 0;
+        }
+
         .read-btn {
-            background: rgba(212,175,55,0.15);
-            border: 1px solid rgba(212,175,55,0.4);
+            background: rgba(212,175,55,0.12);
+            border: 1px solid rgba(212,175,55,0.35);
             color: #d4af37;
             padding: 6px 14px;
             border-radius: 2px;
@@ -1206,9 +1251,8 @@ function getDashboardHtml(): string {
             letter-spacing: 0.1em;
             text-transform: uppercase;
             transition: all 0.2s ease;
-            margin-left: auto;
         }
-        .read-btn:hover { background: rgba(212,175,55,0.25); }
+        .read-btn:hover { background: rgba(212,175,55,0.2); }
     </style>
 </head>
 <body>
@@ -1563,102 +1607,112 @@ function getDashboardHtml(): string {
         }
 
         function renderDetailedResults(job) {
-            let html = '';
-
-            // Hive AI section
             const hive = job.results?.hive;
-            if (hive) {
-                html += '<div class="detail-section"><h3>Hive AI</h3>';
-                html += renderHiveDetails(hive);
-                html += '</div>';
-            }
-
-            // Reality Defender section
             const rd = job.results?.reality_defender;
-            if (rd) {
-                html += '<div class="detail-section"><h3>Reality Defender</h3>';
-                html += renderRDDetails(rd);
-                html += '</div>';
-            }
 
             if (!hive && !rd) {
-                html = '<div class="detail-section"><p style="color:#888;">No results yet. The judges are still deliberating...</p></div>';
+                return '<div class="no-data">The judges are still deliberating...</div>';
             }
 
+            return '<div class="detector-grid">' +
+                renderDetectorCard('Hive AI', hive) +
+                renderDetectorCard('Reality Defender', rd) +
+            '</div>';
+        }
+
+        function renderScoreRing(score, verdictClass) {
+            const radius = 52;
+            const circumference = 2 * Math.PI * radius;
+            const offset = circumference - (score / 100) * circumference;
+            return '<div class="score-ring">' +
+                '<svg width="120" height="120">' +
+                    '<circle class="bg" cx="60" cy="60" r="' + radius + '"/>' +
+                    '<circle class="fg ' + verdictClass + '" cx="60" cy="60" r="' + radius + '" ' +
+                        'stroke-dasharray="' + circumference + '" ' +
+                        'stroke-dashoffset="' + offset + '"/>' +
+                '</svg>' +
+                '<div class="score-value">' + Math.round(score) + '%</div>' +
+            '</div>';
+        }
+
+        function renderDetectorCard(name, result) {
+            if (!result || result.status === 'pending') {
+                return '<div class="detector-card"><h3>' + name + '</h3><div class="no-data">Deliberating...</div></div>';
+            }
+            if (result.status === 'error') {
+                return '<div class="detector-card"><h3>' + name + '</h3><div class="no-data">Chopped</div></div>';
+            }
+
+            const score = (result.score || 0) * 100;
+            const verdictClass = result.verdict === 'likely_ai' ? 'fake' : result.verdict === 'authentic' ? 'authentic' : 'uncertain';
+            const verdictText = result.verdict === 'likely_ai' ? 'Category Is: Fake' : result.verdict === 'authentic' ? 'Serving Realness' : 'Questionable';
+
+            let html = '<div class="detector-card">';
+            html += '<h3>' + name + '</h3>';
+            html += renderScoreRing(score, verdictClass);
+            html += '<div class="verdict-label ' + verdictClass + '">' + verdictText + '</div>';
+
+            // Provider-specific details
+            if (name === 'Hive AI') {
+                html += renderHiveExtras(result);
+            } else {
+                html += renderRDExtras(result);
+            }
+
+            html += '</div>';
             return html;
         }
 
-        function renderHiveDetails(hive) {
+        function renderHiveExtras(hive) {
             let html = '';
-            const score = ((hive.score || 0) * 100).toFixed(1);
-            const verdictClass = hive.verdict === 'likely_ai' ? 'fake' : hive.verdict === 'authentic' ? 'authentic' : 'uncertain';
-
-            html += '<div class="detail-row"><span class="detail-label">AI Generated Score</span><span class="detail-value ' + verdictClass + '">' + score + '%</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">Verdict</span><span class="detail-value ' + verdictClass + '">' + getVerdictLabel(hive.verdict) + '</span></div>';
-
-            // Parse raw Hive response for model breakdown
             const raw = hive.raw;
+
             if (raw?.status?.[0]?.response?.output) {
                 const outputs = raw.status[0].response.output;
+                let topSource = null;
+                let deepfakeScore = 0;
+                let frameCount = outputs.length;
+
+                // Aggregate across all frames
                 for (const output of outputs) {
                     if (output.classes) {
-                        // Find AI models with significant scores
+                        // Find top source model
                         const models = output.classes
-                            .filter(c => c.score > 0.01 && !['ai_generated', 'not_ai_generated', 'deepfake', 'no_deepfake', 'yes_deepfake'].includes(c.class))
-                            .sort((a, b) => b.score - a.score)
-                            .slice(0, 10);
-
-                        if (models.length > 0) {
-                            html += '<div class="detail-row"><span class="detail-label">Detected Source</span><span class="detail-value">' + models[0].class + ' (' + (models[0].score * 100).toFixed(1) + '%)</span></div>';
-                            html += '<div style="margin-top:12px;"><span class="detail-label">Model Breakdown</span></div>';
-                            html += '<div class="model-scores">';
-                            models.forEach(m => {
-                                html += '<div class="model-score"><div class="name">' + m.class + '</div><div class="score">' + (m.score * 100).toFixed(1) + '%</div></div>';
-                            });
-                            html += '</div>';
+                            .filter(c => c.score > 0.5 && !['ai_generated', 'not_ai_generated', 'deepfake', 'no_deepfake', 'yes_deepfake', 'none'].includes(c.class))
+                            .sort((a, b) => b.score - a.score);
+                        if (models.length > 0 && (!topSource || models[0].score > topSource.score)) {
+                            topSource = models[0];
                         }
 
-                        // Deepfake score
-                        const deepfake = output.classes.find(c => c.class === 'yes_deepfake' || c.class === 'deepfake');
-                        if (deepfake) {
-                            html += '<div class="detail-row" style="margin-top:12px;"><span class="detail-label">Deepfake Score</span><span class="detail-value">' + (deepfake.score * 100).toFixed(1) + '%</span></div>';
-                        }
+                        // Get deepfake score
+                        const df = output.classes.find(c => c.class === 'yes_deepfake');
+                        if (df && df.score > deepfakeScore) deepfakeScore = df.score;
                     }
+                }
+
+                if (topSource) {
+                    html += '<div class="source-tag">Source: ' + topSource.class + '</div>';
+                }
+
+                html += '<div class="detail-item"><span class="label">Deepfake</span><span class="value">' + (deepfakeScore * 100).toFixed(1) + '%</span></div>';
+                if (frameCount > 1) {
+                    html += '<div class="detail-item"><span class="label">Frames analyzed</span><span class="value">' + frameCount + '</span></div>';
                 }
             }
 
             return html;
         }
 
-        function renderRDDetails(rd) {
+        function renderRDExtras(rd) {
             let html = '';
-            const score = ((rd.score || 0) * 100).toFixed(1);
-            const verdictClass = rd.verdict === 'likely_ai' ? 'fake' : rd.verdict === 'authentic' ? 'authentic' : 'uncertain';
-
-            html += '<div class="detail-row"><span class="detail-label">Overall Score</span><span class="detail-value ' + verdictClass + '">' + score + '%</span></div>';
-            html += '<div class="detail-row"><span class="detail-label">Verdict</span><span class="detail-value ' + verdictClass + '">' + getVerdictLabel(rd.verdict) + '</span></div>';
-
-            // Parse raw RD response
             const raw = rd.raw;
-            if (raw) {
-                if (raw.resultsSummary?.status) {
-                    html += '<div class="detail-row"><span class="detail-label">Status</span><span class="detail-value">' + raw.resultsSummary.status + '</span></div>';
-                }
-                if (raw.resultsSummary?.metadata?.finalScore !== undefined) {
-                    html += '<div class="detail-row"><span class="detail-label">Final Score (raw)</span><span class="detail-value">' + raw.resultsSummary.metadata.finalScore + '</span></div>';
-                }
 
-                // Individual model results
-                if (raw.models && raw.models.length > 0) {
-                    html += '<div style="margin-top:12px;"><span class="detail-label">Model Results</span></div>';
-                    html += '<div class="model-scores">';
-                    raw.models.forEach(m => {
-                        const modelScore = m.finalScore ?? m.data?.score ?? 'N/A';
-                        const displayScore = typeof modelScore === 'number' ? modelScore.toFixed(1) : modelScore;
-                        html += '<div class="model-score"><div class="name">' + m.name + '</div><div class="score">' + displayScore + '</div></div>';
-                    });
-                    html += '</div>';
-                }
+            if (raw?.resultsSummary?.status) {
+                html += '<div class="detail-item"><span class="label">Status</span><span class="value">' + raw.resultsSummary.status + '</span></div>';
+            }
+
+            if (raw?.models && raw.models.length > 0) {
+                html += '<div class="detail-item"><span class="label">Models run</span><span class="value">' + raw.models.length + '</span></div>';
             }
 
             return html;

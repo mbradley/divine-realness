@@ -1,0 +1,25 @@
+# ABOUTME: Cloudflare Workers configuration for Realness AI video detection
+# ABOUTME: Uses D1 for job storage and secrets for API keys
+
+name = "divine-ai-detector"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "realness-db"
+database_id = "889ff474-58e3-4a6e-9364-2e66658f6ec2"
+
+# Custom domain route
+[[routes]]
+pattern = "realness.admin.divine.video/*"
+zone_name = "divine.video"
+
+# Secrets (set via wrangler secret put):
+# - REALITY_DEFENDER_API_KEY
+# - HIVE_API_KEY
+# - SENSITY_API_KEY
